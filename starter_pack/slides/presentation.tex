@@ -1,0 +1,472 @@
+\documentclass[11pt,aspectratio=169]{beamer}
+
+\usetheme{Madrid}
+\usecolortheme{whale}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}{%
+  \leavevmode\hbox{%
+    \begin{beamercolorbox}[wd=.33\paperwidth,ht=2.5ex,dp=1ex,center]{author in head/foot}%
+      \usebeamerfont{author in head/foot}\insertshortauthor
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=.34\paperwidth,ht=2.5ex,dp=1ex,center]{title in head/foot}%
+      \usebeamerfont{title in head/foot}\insertshorttitle
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=.33\paperwidth,ht=2.5ex,dp=1ex,right]{date in head/foot}%
+      \usebeamerfont{date in head/foot}\insertframenumber{} / \inserttotalframenumber\hspace*{2ex}
+    \end{beamercolorbox}%
+  }\vskip0pt%
+}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{array}
+
+\graphicspath{{../figures/}}
+
+\definecolor{accentblue}{HTML}{2471A3}
+\definecolor{accentred}{HTML}{C0392B}
+\definecolor{accentgreen}{HTML}{27AE60}
+\definecolor{lightgray}{HTML}{F2F3F4}
+
+\setbeamercolor{block title}{bg=accentblue,fg=white}
+\setbeamercolor{block body}{bg=lightgray,fg=black}
+
+\title[Math4AI Capstone]{From Linear Scores to a Single Hidden Layer}
+\subtitle{A Mathematical Study of Simple Learning Systems}
+\author[Team]{Team Member 1 \and Team Member 2 \and Team Member 3}
+\institute{National AI Center --- AI Academy}
+\date{Math4AI Final Capstone, March 2026}
+
+\begin{document}
+
+% ──────────────────────────────────────────
+% SLIDE 1: Title
+% ──────────────────────────────────────────
+\begin{frame}
+\titlepage
+\end{frame}
+
+% ──────────────────────────────────────────
+% SLIDE 2: Central Question
+% ──────────────────────────────────────────
+\begin{frame}{The Central Question}
+
+\begin{block}{Research Question}
+\textit{When does a one-hidden-layer nonlinear classifier genuinely improve on a linear decision rule, and when is additional model complexity unnecessary?}
+\end{block}
+
+\vspace{0.8em}
+
+\textbf{Our approach:}
+\begin{itemize}
+    \item Compare \textbf{softmax regression} (linear baseline) against a \textbf{one-hidden-layer neural network} (tanh + softmax)
+    \item Three datasets of increasing complexity: Gaussian blobs, moons, digits
+    \item Fair comparison: same splits, preprocessing, metrics, and checkpoint policy
+    \item \textbf{More complexity is not automatically better} --- we let the evidence decide
+\end{itemize}
+
+\end{frame}
+
+% ──────────────────────────────────────────
+% SLIDE 3: Models
+% ──────────────────────────────────────────
+\begin{frame}{Two Models, Same Objective}
+
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+\textbf{Model 1: Softmax Regression}
+\[
+s(x) = Wx + b
+\]
+\[
+p_j(x) = \frac{\exp(s_j)}{\sum_\ell \exp(s_\ell)}
+\]
+\begin{itemize}
+    \item Linear decision boundaries
+    \item Parameters: $W \in \mathbb{R}^{k \times d}$, $b \in \mathbb{R}^k$
+    \item Directly outputs a categorical distribution
+\end{itemize}
+\end{column}
+
+\begin{column}{0.48\textwidth}
+\textbf{Model 2: Neural Network}
+\[
+h = \tanh(W_1 x + b_1)
+\]
+\[
+s = W_2 h + b_2
+\]
+\begin{itemize}
+    \item Nonlinear hidden representation
+    \item \texttt{tanh} activation: smooth, zero-centered
+    \item Can learn curved decision boundaries
+\end{itemize}
+\end{column}
+\end{columns}
+
+\vspace{0.6em}
+\centering
+Both trained by minimizing cross-entropy $\mathcal{L} = -\frac{1}{n}\sum_i \log p_{y_i}(x_i)$ (= negative log-likelihood)
+
+\end{frame}
+
+% ──────────────────────────────────────────
+% SLIDE 4: Backpropagation
+% ──────────────────────────────────────────
+\begin{frame}{Backpropagation: Chain Rule in Action}
+
+\textbf{Idea:} propagate loss sensitivities backward through the computation graph.
+
+\vspace{0.3em}
+\begin{columns}[T]
+\begin{column}{0.55\textwidth}
+\textbf{Key gradient formulas (vectorized):}
+\begin{align*}
+\frac{\partial \mathcal{L}}{\partial S} &= \tfrac{1}{n}(P - Y) \\[4pt]
+\frac{\partial \mathcal{L}}{\partial W_2} &= \left(\tfrac{\partial \mathcal{L}}{\partial S}\right)^\top H \\[4pt]
+\frac{\partial \mathcal{L}}{\partial Z_1} &= \tfrac{\partial \mathcal{L}}{\partial S}\, W_2 \odot (1 - H \odot H) \\[4pt]
+\frac{\partial \mathcal{L}}{\partial W_1} &= \left(\tfrac{\partial \mathcal{L}}{\partial Z_1}\right)^\top X
+\end{align*}
+\end{column}
+\begin{column}{0.42\textwidth}
+\textbf{Verified with:}
+\begin{itemize}
+    \item Numerical gradient check\\($|$analytical $-$ numerical$|$ $< 10^{-4}$)
+    \item Probabilities sum to 1
+    \item Loss decreases on tiny batches
+    \item Overfit 10 samples to 100\%
+    \item No NaN/Inf in parameters
+\end{itemize}
+\end{column}
+\end{columns}
+
+\end{frame}
+
+% ──────────────────────────────────────────
+% SLIDE 5: Linear Gaussian
+% ──────────────────────────────────────────
+\begin{frame}{Experiment 1: Linear Gaussian --- Linear Model is Sufficient}
+
+\begin{columns}[c]
+\begin{column}{0.62\textwidth}
+\includegraphics[width=\textwidth]{comparison_lineargaussian.png}
+\end{column}
+\begin{column}{0.36\textwidth}
+\begin{block}{Key Finding}
+Two Gaussian blobs with mild overlap are \textbf{linearly separable}.
+\end{block}
+\begin{itemize}
+    \item Both models learn nearly identical linear boundaries
+    \item The NN's extra capacity adds nothing
+    \item \textbf{The linear model is geometrically sufficient}
+\end{itemize}
+\end{column}
+\end{columns}
+
+\end{frame}
+
+% ──────────────────────────────────────────
+% SLIDE 6: Moons
+% ──────────────────────────────────────────
+\begin{frame}{Experiment 2: Moons --- Nonlinearity is Essential}
+
+\begin{columns}[c]
+\begin{column}{0.62\textwidth}
+\includegraphics[width=\textwidth]{comparison_moons.png}
+\end{column}
+\begin{column}{0.36\textwidth}
+\begin{block}{Key Finding}
+The interleaved moons geometry \textbf{cannot} be separated by a linear boundary.
+\end{block}
+\begin{itemize}
+    \item Softmax regression cuts through both classes
+    \item NN learns a curved boundary wrapping around each moon
+    \item The hidden layer provides a \textbf{nonlinear re-mapping} of the input space
+\end{itemize}
+\end{column}
+\end{columns}
+
+\end{frame}
+
+% ──────────────────────────────────────────
+% SLIDE 7: Digits Benchmark
+% ──────────────────────────────────────────
+\begin{frame}{Experiment 3: Digits Benchmark}
+
+\begin{columns}[c]
+\begin{column}{0.55\textwidth}
+\includegraphics[width=\textwidth]{loss_curves_digits.png}
+\end{column}
+\begin{column}{0.43\textwidth}
+\textbf{Protocol:} 64-dim inputs, 10 classes, fixed split, $\lambda=10^{-4}$, batch 64, 200 epochs
+
+\vspace{0.4em}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Model} & \textbf{Acc} & \textbf{CE} \\
+\midrule
+Softmax (SGD) & 0.933 & 0.269 \\
+NN $h\!=\!32$ (Adam) & \textbf{0.957} & \textbf{0.157} \\
+\bottomrule
+\end{tabular}
+
+\vspace{0.5em}
+\begin{itemize}
+    \item NN converges faster and lower
+    \item 2.4 ppt accuracy gain, 42\% lower CE
+    \item Hidden layer captures digit-specific features the linear model misses
+\end{itemize}
+\end{column}
+\end{columns}
+
+\end{frame}
+
+% ──────────────────────────────────────────
+% SLIDE 8: Capacity Ablation
+% ──────────────────────────────────────────
+\begin{frame}{Capacity Ablation: Hidden Width on Moons $\{2, 8, 32\}$}
+
+\begin{columns}[c]
+\begin{column}{0.65\textwidth}
+\includegraphics[width=\textwidth]{capacity_ablation_boundaries.png}
+\end{column}
+\begin{column}{0.33\textwidth}
+\begin{itemize}
+    \item \textbf{$h\!=\!2$:} crude, nearly linear separation --- too few dimensions to represent the curve
+    \item \textbf{$h\!=\!8$:} smooth nonlinear boundary captures the moon shape
+    \item \textbf{$h\!=\!32$:} even tighter fit, but marginal gain over $h\!=\!8$
+\end{itemize}
+
+\vspace{0.4em}
+\textbf{Takeaway:} capacity must match task complexity; beyond that, returns diminish.
+\end{column}
+\end{columns}
+
+\end{frame}
+
+% ──────────────────────────────────────────
+% SLIDE 9: Optimizer Study
+% ──────────────────────────────────────────
+\begin{frame}{Optimizer Study on Digits (NN $h\!=\!32$)}
+
+\begin{columns}[c]
+\begin{column}{0.55\textwidth}
+\includegraphics[width=\textwidth]{optimizer_study_digits.png}
+\end{column}
+\begin{column}{0.43\textwidth}
+
+\begin{tabular}{lccc}
+\toprule
+\textbf{Optimizer} & \textbf{Acc} & \textbf{CE} & \textbf{Ep.} \\
+\midrule
+SGD & 0.948 & 0.170 & 197 \\
+Momentum & 0.954 & 0.165 & 197 \\
+Adam & 0.951 & \textbf{0.151} & 197 \\
+\bottomrule
+\end{tabular}
+
+\vspace{0.5em}
+\begin{itemize}
+    \item All three reach similar final accuracy
+    \item \textbf{Adam} achieves the lowest CE, converges fastest early on
+    \item Momentum accelerates SGD noticeably
+    \item Adaptive rates (Adam) help most in the loss landscape of a 10-class problem
+\end{itemize}
+\end{column}
+\end{columns}
+
+\end{frame}
+
+% ──────────────────────────────────────────
+% SLIDE 10: Repeated-Seed Evaluation
+% ──────────────────────────────────────────
+\begin{frame}{Repeated-Seed Evaluation (5 Seeds, 95\% CI)}
+
+\begin{columns}[c]
+\begin{column}{0.45\textwidth}
+\includegraphics[width=\textwidth]{repeated_seed_digits.png}
+\end{column}
+\begin{column}{0.53\textwidth}
+\[
+\bar{x} \pm 2.776 \cdot \frac{s}{\sqrt{5}}
+\]
+
+\vspace{0.3em}
+\begin{tabular}{lcc}
+\toprule
+& \textbf{Test Accuracy} & \textbf{Test CE} \\
+\midrule
+Softmax & $0.933 \pm 0.007$ & $0.269 \pm 0.007$ \\
+NN ($h\!=\!32$) & $\mathbf{0.957 \pm 0.009}$ & $\mathbf{0.157 \pm 0.016}$ \\
+\bottomrule
+\end{tabular}
+
+\vspace{0.5em}
+\begin{itemize}
+    \item \textbf{CIs do not overlap} for CE $\Rightarrow$ NN advantage is statistically meaningful
+    \item NN has slightly wider CI (more sensitive to initialization)
+    \item A single run could mislead; repeated seeds give \textbf{honest uncertainty estimates}
+\end{itemize}
+\end{column}
+\end{columns}
+
+\end{frame}
+
+% ──────────────────────────────────────────
+% SLIDE 11: Track A - PCA/SVD
+% ──────────────────────────────────────────
+\begin{frame}{Track A: PCA/SVD and Input Geometry}
+
+\begin{columns}[c]
+\begin{column}{0.48\textwidth}
+\includegraphics[width=\textwidth]{pca_scree_digits.png}
+
+\vspace{0.3em}
+\centering
+\small Top 20 PCs capture \textbf{89.6\%} of variance
+\end{column}
+\begin{column}{0.48\textwidth}
+\includegraphics[width=\textwidth]{pca_2d_digits.png}
+
+\vspace{0.3em}
+\centering
+\small 2D projection: clusters overlap substantially
+\end{column}
+\end{columns}
+
+\end{frame}
+
+% ──────────────────────────────────────────
+% SLIDE 12: Track A - PCA Softmax Comparison
+% ──────────────────────────────────────────
+\begin{frame}{Track A: Softmax Performance vs.\ PCA Dimensions}
+
+\begin{columns}[c]
+\begin{column}{0.55\textwidth}
+\includegraphics[width=\textwidth]{pca_softmax_comparison.png}
+\end{column}
+\begin{column}{0.43\textwidth}
+\begin{tabular}{ccc}
+\toprule
+\textbf{PCA $m$} & \textbf{Val Acc} & \textbf{Val CE} \\
+\midrule
+10 & 0.927 & 0.287 \\
+20 & 0.941 & 0.229 \\
+40 & 0.949 & 0.213 \\
+64 (full) & 0.955 & 0.211 \\
+\bottomrule
+\end{tabular}
+
+\vspace{0.5em}
+\begin{itemize}
+    \item Even 20 PCs yield $>$94\% accuracy --- most discriminative information lives in a linear subspace
+    \item But the NN at full 64 dims still outperforms softmax at any PCA level
+    \item \textbf{Linear compression helps, but nonlinear features add value beyond what PCA captures}
+\end{itemize}
+\end{column}
+\end{columns}
+
+\end{frame}
+
+% ──────────────────────────────────────────
+% SLIDE 13: Failure Case
+% ──────────────────────────────────────────
+\begin{frame}{Failure Case: Under-Capacity NN ($h\!=\!2$) on 10-Class Digits}
+
+\begin{columns}[c]
+\begin{column}{0.55\textwidth}
+\includegraphics[width=\textwidth]{failure_analysis.png}
+\end{column}
+\begin{column}{0.43\textwidth}
+
+\begin{tabular}{lcc}
+\toprule
+& \textbf{Acc} & \textbf{CE} \\
+\midrule
+NN $h\!=\!2$ & 0.590 & 1.113 \\
+NN $h\!=\!32$ & 0.957 & 0.157 \\
+\bottomrule
+\end{tabular}
+
+\vspace{0.5em}
+\textbf{Why it fails:}
+\begin{itemize}
+    \item 2 hidden units create a \textbf{2-dimensional bottleneck}
+    \item 64-dim input $\to$ 2-dim $\to$ 10 classes: impossible to preserve enough structure
+    \item Both train and val loss stay high $\Rightarrow$ underfitting, not overfitting
+    \item \textbf{Lesson:} complexity must match task demands
+\end{itemize}
+\end{column}
+\end{columns}
+
+\end{frame}
+
+% ──────────────────────────────────────────
+% SLIDE 14: Discussion
+% ──────────────────────────────────────────
+\begin{frame}{Answering the Central Question}
+
+\begin{block}{When is the linear model sufficient?}
+When the class geometry is linearly separable (Gaussian blobs). Additional capacity adds no benefit.
+\end{block}
+
+\begin{block}{What representational change does the hidden layer provide?}
+It transforms the input into a space where previously inseparable classes become linearly separable. On moons this means learning curved boundaries; on digits it means extracting stroke-level features.
+\end{block}
+
+\begin{block}{When does extra complexity fail to justify itself?}
+When the hidden layer is too small ($h\!=\!2$ on 10 classes) --- the bottleneck destroys information. Also on linearly separable tasks, where complexity is wasted.
+\end{block}
+
+\begin{block}{What do repeated-seed statistics add?}
+They reveal initialization sensitivity and give honest confidence intervals. A single run may be lucky or unlucky; five seeds show the NN advantage is consistent, not an artifact.
+\end{block}
+
+\end{frame}
+
+% ──────────────────────────────────────────
+% SLIDE 15: Limitations
+% ──────────────────────────────────────────
+\begin{frame}{Limitations}
+
+\begin{itemize}
+    \item \textbf{Single hidden layer only} --- deeper architectures may behave differently
+    \item \textbf{Small-scale benchmark} --- 1797 samples, 64 features; conclusions may not transfer to large-scale data (e.g., ImageNet)
+    \item \textbf{Only \texttt{tanh} activation} --- ReLU or other activations may yield different dynamics
+    \item \textbf{Fixed regularization} ($\lambda = 10^{-4}$) --- we did not tune regularization strength
+    \item \textbf{5 seeds} --- a larger seed budget would tighten confidence intervals
+    \item \textbf{No test on intermediate complexity tasks} --- the gap between moons and digits leaves room for further study
+    \item \textbf{PCA is linear} --- nonlinear dimensionality reduction (e.g., t-SNE) was not explored
+\end{itemize}
+
+\vspace{0.5em}
+\centering\textit{These boundaries are honest --- they define what our evidence supports and what it does not.}
+
+\end{frame}
+
+% ──────────────────────────────────────────
+% SLIDE 16: Thank You
+% ──────────────────────────────────────────
+\begin{frame}{}
+
+\vfill
+\centering
+{\LARGE \textbf{Thank You}}
+
+\vspace{1em}
+{\large Questions?}
+
+\vspace{2em}
+\small
+Repository: \texttt{github.com/...} \\
+All code implemented from scratch in NumPy
+
+\vfill
+
+\end{frame}
+
+\end{document}
