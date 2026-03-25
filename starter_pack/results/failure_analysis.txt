@@ -1,0 +1,13 @@
+Failure-Case Analysis: Under-Capacity NN (h=2) on 10-Class Digits
+============================================================
+
+NN h=2  | Test Acc: 0.5897 | Test CE: 1.1133
+
+Analysis:
+With only 2 hidden units, the network has a 2-dimensional bottleneck.
+The hidden representation h = tanh(W1 x + b1) maps the 64-dim input
+to only 2 dimensions, which is insufficient to separate 10 classes.
+The capacity is far below what is needed for a 10-class problem.
+The model underfits: both training and validation loss remain high,
+and accuracy plateaus far below what a wider network achieves.
+This demonstrates that model complexity must match task complexity.
