@@ -6,4 +6,7 @@
 *.out
 *.pdf
 *.synctex.gz
+*.nav
+*.snm
+*.toc
 deliverables/committee_evaluation_sheet.tex
