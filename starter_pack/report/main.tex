@@ -1,0 +1,732 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{amsmath,amssymb,mathtools}
+\usepackage{amsthm}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{tabularx}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!50!black,
+    urlcolor=blue!60!black,
+    citecolor=blue!50!black
+}
+
+% ── Notation shortcuts ──
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\bx}{\mathbf{x}}
+\newcommand{\bX}{\mathbf{X}}
+\newcommand{\bz}{\mathbf{z}}
+\newcommand{\bW}{\mathbf{W}}
+\newcommand{\bb}{\mathbf{b}}
+\newcommand{\bh}{\mathbf{h}}
+\newcommand{\bs}{\mathbf{s}}
+\newcommand{\bY}{\mathbf{Y}}
+\newcommand{\bP}{\mathbf{P}}
+\newcommand{\bH}{\mathbf{H}}
+\newcommand{\bS}{\mathbf{S}}
+\newcommand{\bZ}{\mathbf{Z}}
+\newcommand{\bA}{\mathbf{A}}
+\newcommand{\bone}{\mathbf{1}}
+\newcommand{\bmu}{\boldsymbol{\mu}}
+\newcommand{\bdelta}{\boldsymbol{\delta}}
+\newtheorem{proposition}{Proposition}
+
+\title{\textbf{From Linear Scores to a Single Hidden Layer:\\
+A Mathematical Study of Simple Learning Systems}}
+\author{Sharaf Feyzullayev \and Nicat Samadov \and Samir Abdullazade}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+% ================================================================
+%  ABSTRACT
+% ================================================================
+\begin{abstract}
+This report investigates a precise question: when does a one-hidden-layer neural network
+genuinely improve on a linear decision rule, and when is additional model complexity
+unnecessary?  We compare Softmax Regression (a linear classifier) with a single-hidden-layer
+neural network ($\tanh$ activation, hidden width $H{=}32$) on three tasks of increasing
+geometric complexity---all implemented from scratch in NumPy with no automatic-differentiation
+libraries.  On the \emph{Linear Gaussian} task, the Bayes-optimal boundary is a hyperplane;
+both models achieve near-perfect accuracy, confirming that the hidden layer provides no
+representational advantage.  On the \emph{Moons} task, Softmax Regression fails because no
+hyperplane can separate the interlocking arcs, while the neural network learns a curved
+boundary achieving near-$100\%$ accuracy.  On the \emph{Digits} benchmark ($d{=}64$,
+$K{=}10$), five-seed evaluation yields $93.26\%\;\pm\;0.73\%$ for Softmax versus
+$95.71\%\;\pm\;0.91\%$ for the neural network---a modest but statistically robust gain.
+A Track~A PCA/SVD analysis reveals that 20~principal components capture $89.6\%$ of
+variance and sustain $94.08\%$ Softmax accuracy, exposing substantial linear structure.
+A failure-case study with an $H{=}2$ bottleneck ($58.97\%$ accuracy) demonstrates that
+representational capacity is a prerequisite that optimisation cannot substitute.
+\end{abstract}
+
+% ================================================================
+%  NOTATION TABLE
+% ================================================================
+\vspace{-0.3em}
+\noindent\textbf{Notation.}\;
+Lowercase bold ($\bx$) denotes column vectors; uppercase bold ($\bX$) denotes matrices.
+A batch of $n$ inputs is stored row-wise in $\bX\in\R^{n\times d}$.
+\begin{center}
+\small
+\begin{tabular}{@{}ll@{\qquad}ll@{}}
+\toprule
+$\bx\in\R^{d}$ & input feature vector &
+$\bW_1\!\in\!\R^{d\times H}$ & hidden-layer weights \\
+$y\in\{1,\dots,K\}$ & true class label &
+$\bW_2\!\in\!\R^{H\times K}$ & output-layer weights \\
+$K$ & number of classes &
+$\bb_1\!\in\!\R^{H},\;\bb_2\!\in\!\R^{K}$ & bias vectors \\
+$H$ & hidden-layer width &
+$\bZ^{(1)},\bZ^{(2)}$ & pre-activation matrices \\
+$n$ & batch/sample size &
+$\bA^{(1)}$ & hidden activations \\
+$d$ & input dimension &
+$\hat{\bY}\!=\!\bP$ & predicted probability matrix \\
+$\lambda$ & $L_2$ regularisation coefficient &
+$\eta$ & learning rate \\
+$\odot$ & Hadamard (element-wise) product &
+$\|\cdot\|_F$ & Frobenius norm \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% ================================================================
+\section{Introduction}
+% ================================================================
+
+The central question of this capstone is:
+\begin{quote}
+\itshape When does a one-hidden-layer nonlinear classifier genuinely improve on a linear
+decision rule, and when is additional model complexity unnecessary?
+\end{quote}
+
+A responsible investigation requires
+(i)~deriving the mathematics underlying each model class,
+(ii)~constructing experiments whose geometry isolates the relevant differences,
+(iii)~evaluating with repeated seeds and honest statistics, and
+(iv)~acknowledging where conclusions do and do not extend.
+
+We study two model classes, each producing a categorical distribution over $K$ classes:
+\begin{enumerate}[label=(\roman*),leftmargin=2em,itemsep=0.15em]
+  \item \textbf{Softmax Regression}---an affine map $\bz = \bW\bx + \bb$ followed by the
+        softmax function.  The decision boundary is a set of hyperplanes, so this model can
+        only separate linearly distinguishable classes.
+  \item \textbf{One-Hidden-Layer Neural Network}---a composition of an affine map, the
+        $\tanh$ nonlinearity, and a second affine map followed by softmax.  The hidden layer
+        performs a learned nonlinear coordinate change; the output layer then draws a linear
+        boundary in the transformed space.  The resulting decision boundary can curve,
+        with complexity depending on the hidden width~$H$.
+\end{enumerate}
+
+Both models are evaluated on three tasks spanning a spectrum of geometric difficulty:
+\begin{itemize}[leftmargin=1.4em,itemsep=0.15em]
+  \item \textbf{Linear Gaussian}: two isotropic Gaussian blobs in $\R^2$---linearly separable
+        by construction.
+  \item \textbf{Moons}: two interleaving half-circles in $\R^2$---no hyperplane can separate
+        them.
+  \item \textbf{Digits}: an $8{\times}8$ handwritten-digit dataset ($d{=}64$, $K{=}10$) with a
+        fixed train/validation/test split, representing a real-world task of moderate complexity.
+\end{itemize}
+
+Every model and optimiser is implemented from scratch in NumPy; no automatic-differentiation
+libraries or high-level ML frameworks are used, ensuring that every gradient computation is
+understood at the level of the chain rule.
+
+% ================================================================
+\section{Background and Mathematical Setup}
+\label{sec:background}
+% ================================================================
+
+\subsection{Softmax Function and the Categorical Model}
+
+For an input $\bx\in\R^d$, Softmax Regression computes logits $\bz = \bW\bx + \bb$, where
+$\bW\in\R^{K\times d}$ and $\bb\in\R^K$.  These scores are converted to a probability
+distribution via:
+\begin{equation}\label{eq:softmax}
+  \hat{y}_k \;=\; P(y{=}k\mid\bx;\bW,\bb)
+  \;=\; \frac{\exp(z_k)}{\displaystyle\sum_{j=1}^{K}\exp(z_j)},
+  \qquad k=1,\dots,K.
+\end{equation}
+Each $\hat{y}_k > 0$ and $\sum_k \hat{y}_k = 1$ by construction.  In practice, numerical
+stability is ensured by subtracting the row-wise maximum before exponentiation, exploiting
+the shift-invariance $\mathrm{softmax}(\bz) = \mathrm{softmax}(\bz - c\bone)$.
+
+% ──────────────────────────────────────────────────────────────────
+\subsection{Cross-Entropy Loss as Negative Log-Likelihood}
+\label{sec:nll}
+
+Given $N$ independent training pairs $\{(\bx^{(i)},y^{(i)})\}_{i=1}^{N}$, the likelihood is
+$\mathcal{L}(\theta) = \prod_{i=1}^{N} \hat{y}_{y^{(i)}}^{(i)}$.
+Taking the logarithm, negating, and averaging yields the cross-entropy loss:
+\begin{equation}\label{eq:ce}
+  J(\theta) \;=\; -\,\frac{1}{N}\sum_{i=1}^{N}\sum_{k=1}^{K}
+  e_k^{(i)}\log\hat{y}_k^{(i)},
+\end{equation}
+where $e_k^{(i)} = 1$ iff $k = y^{(i)}$ (one-hot encoding).
+
+\begin{proposition}
+Minimising the cross-entropy loss~\eqref{eq:ce} is algebraically identical to maximising
+the log-likelihood of the observed labels under the categorical model~\eqref{eq:softmax}.
+\end{proposition}
+
+This is not a heuristic choice: the loss function arises directly from treating
+classification as probabilistic inference.
+Adding an $L_2$ penalty $\frac{\lambda}{2}\|\bW\|_F^2$ is equivalent to MAP estimation
+under a Gaussian prior $\bW\sim\mathcal{N}(\mathbf{0},\lambda^{-1}\mathbf{I})$.
+We use $\lambda=10^{-4}$ throughout.
+
+% ──────────────────────────────────────────────────────────────────
+\subsection{Backpropagation: Concept and Derivation}
+\label{sec:backprop}
+
+Backpropagation is the systematic, reverse-order application of the multivariate chain rule
+through the computation graph.  Starting from the scalar loss, it computes how $J$ changes
+with respect to every parameter by propagating ``error signals'' backward, multiplying at each
+layer by the local Jacobian.  Three properties make it practical: \textit{locality} (each layer
+only needs its own inputs and the upstream gradient), \textit{efficiency} (cost proportional to
+one forward pass), and \textit{exactness} (no finite-difference approximations).
+
+\paragraph{Forward pass.}
+For a minibatch $\bX\in\R^{n\times d}$ with one-hot labels $\bY\in\{0,1\}^{n\times K}$:
+\begin{align}
+  \bZ^{(1)} &= \bX\,\bW_1 + \bone\,\bb_1^\top
+    & &\in\R^{n\times H}, \label{eq:fwd1}\\
+  \bA^{(1)} &= \tanh\!\bigl(\bZ^{(1)}\bigr)
+    & &\in\R^{n\times H}, \label{eq:fwd2}\\
+  \bZ^{(2)} &= \bA^{(1)}\bW_2 + \bone\,\bb_2^\top
+    & &\in\R^{n\times K}, \label{eq:fwd3}\\
+  \hat{\bY}  &= \mathrm{softmax}_{\text{row}}\!\bigl(\bZ^{(2)}\bigr)
+    & &\in\R^{n\times K}. \label{eq:fwd4}
+\end{align}
+
+\paragraph{Step 1: Output-layer error signal.}
+\begin{equation}\label{eq:delta2}
+  \bdelta^{(2)}
+  \;=\;\frac{\partial J}{\partial \bZ^{(2)}}
+  \;=\;\frac{1}{n}\bigl(\hat{\bY}-\bY\bigr)
+  \quad\in\R^{n\times K}.
+\end{equation}
+This elegant result follows from the softmax Jacobian:
+$\frac{\partial \hat{Y}_{ij}}{\partial Z^{(2)}_{ik}} = \hat{Y}_{ij}(\delta_{jk} - \hat{Y}_{ik})$,
+combined with the one-hot property $\sum_j Y_{ij} = 1$.
+
+\paragraph{Step 2: Output-layer parameter gradients.}
+\begin{align}
+  \frac{\partial J}{\partial \bW_2}
+  &= \bigl(\bA^{(1)}\bigr)^\top \bdelta^{(2)}
+  \;\in\;\R^{H\times K},
+  \label{eq:gW2}\\[3pt]
+  \frac{\partial J}{\partial \bb_2}
+  &= \bigl(\bdelta^{(2)}\bigr)^\top\bone
+  \;\in\;\R^{K}.
+  \label{eq:gb2}
+\end{align}
+
+\paragraph{Step 3: Hidden-layer error (backpropagation through $\tanh$).}
+\begin{equation}\label{eq:delta1}
+  \bdelta^{(1)}
+  \;=\;
+  \bigl(\bdelta^{(2)}\,\bW_2^\top\bigr)
+  \;\odot\;
+  \bigl(1 - \bA^{(1)}\odot\bA^{(1)}\bigr)
+  \quad\in\R^{n\times H}.
+\end{equation}
+The first factor propagates the error across $\bW_2$; the Hadamard product scales each
+component by the local $\tanh$ derivative, $\tanh'(z) = 1 - \tanh^2(z)$.
+
+\paragraph{Step 4: Hidden-layer parameter gradients.}
+\begin{align}
+  \frac{\partial J}{\partial \bW_1}
+  &= \bX^\top\,\bdelta^{(1)}
+  \;\in\;\R^{d\times H},
+  \label{eq:gW1}\\[3pt]
+  \frac{\partial J}{\partial \bb_1}
+  &= \bigl(\bdelta^{(1)}\bigr)^\top\bone
+  \;\in\;\R^{H}.
+  \label{eq:gb1}
+\end{align}
+With $L_2$ regularisation, we add $\lambda\bW_\ell$ to each weight gradient.
+
+\paragraph{Parameter count.}
+Softmax Regression: $Kd + K$ parameters.  The neural network:
+$H(d+K) + H + K$ parameters.  For Digits ($d{=}64$, $H{=}32$, $K{=}10$):
+$2{,}410$ versus $650$---roughly $3.7{\times}$ more.
+
+% ──────────────────────────────────────────────────────────────────
+\subsection{Geometric Compatibility: Gaussian vs.\ Moons}
+\label{sec:geometry}
+
+\paragraph{Why the Gaussian task matches a linear decision rule.}
+With two classes drawn from $\mathcal{N}(\bmu_0,\sigma^2\mathbf{I})$ and
+$\mathcal{N}(\bmu_1,\sigma^2\mathbf{I})$ with equal priors, the log-posterior ratio is:
+\begin{equation}\label{eq:logodds}
+  \log\frac{P(y{=}1\mid\bx)}{P(y{=}0\mid\bx)}
+  \;=\;
+  \frac{1}{\sigma^2}(\bmu_1-\bmu_0)^\top\bx
+  \;-\;\frac{1}{2\sigma^2}\bigl(\|\bmu_1\|^2-\|\bmu_0\|^2\bigr).
+\end{equation}
+This is \emph{affine} in~$\bx$: the Bayes-optimal boundary is a hyperplane with normal
+$\bmu_1-\bmu_0$.  Softmax Regression can represent this exactly; a hidden layer merely
+over-parameterises the same function.
+
+\paragraph{Why the Moons task requires nonlinearity.}
+The two classes form interleaving half-circles whose supports curve into each other's
+coordinate space.  No hyperplane can separate them.  The hidden layer addresses this by
+mapping $\bx \mapsto \tanh(\bW_1\bx + \bb_1) \in \R^H$, a learned nonlinear coordinate
+change that can untangle the arcs into linearly separable clusters in the new space.
+
+% ================================================================
+\section{Methods}
+\label{sec:methods}
+% ================================================================
+
+\paragraph{Datasets.}
+Three datasets, loaded from the starter pack with no additional preprocessing:
+\begin{enumerate}[label=\arabic*.,leftmargin=2em,itemsep=0.15em]
+  \item \textbf{Linear Gaussian}: 400 points in $\R^2$, two isotropic Gaussian blobs.
+  \item \textbf{Moons}: 400 points in $\R^2$, two interlocking half-circles with noise.
+  \item \textbf{Digits}: $d{=}64$ pixel features from the UCI handwritten digits dataset,
+        stratified into 1\,258~train / 270~validation / 269~test, $K{=}10$ classes.
+\end{enumerate}
+
+\paragraph{Implementation.}
+Both models are implemented entirely in NumPy with numerically stable softmax.  Three
+optimisers---SGD, Momentum ($\mu{=}0.9$), and Adam ($\beta_1{=}0.9$, $\beta_2{=}0.999$,
+$\varepsilon{=}10^{-8}$)---are implemented from scratch.
+
+\paragraph{Training protocol for Digits.}
+A strict protocol ensures fair comparison:
+mini-batch size~64; $L_2$ regularisation $\lambda=10^{-4}$; epoch budget~200;
+model selection by lowest \emph{validation} cross-entropy checkpoint;
+Softmax baseline uses SGD ($\eta{=}0.05$); neural network default uses $H{=}32$, SGD
+($\eta{=}0.05$).
+
+\paragraph{Synthetic tasks.}
+Both models trained with full-batch gradient descent for 300~epochs.
+Softmax uses SGD ($\eta{=}0.1$); the neural network uses Adam ($\eta{=}0.01$).
+$L_2$ regularisation: $\lambda{=}10^{-5}$.  Best validation checkpoint is reported.
+
+\paragraph{Repeated-seed evaluation.}
+On Digits, each configuration is trained with five random seeds ($s \in \{0,\dots,4\}$).
+Test set is evaluated exactly once per seed.  We report:
+\begin{equation}\label{eq:ci}
+  \bar{x}\;\pm\;t_{0.025,\,4}\cdot\frac{s}{\sqrt{5}}
+  \;=\;\bar{x}\;\pm\;2.776\cdot\frac{s}{\sqrt{5}},
+\end{equation}
+where $s$ is the sample standard deviation.
+
+% ================================================================
+\section{Implementation Sanity Checks}
+\label{sec:sanity}
+% ================================================================
+
+Before running experiments, five automated checks verified correctness:
+
+\begin{enumerate}[label=\textbf{Check~\arabic*.},leftmargin=3em,itemsep=0.2em]
+  \item \textbf{Probability normalisation.}
+        On extreme logit vectors (including $\bz=[-100,\;0,\;100]$), softmax outputs
+        sum to $1.0$ to machine precision.
+        \hfill$\checkmark$\;PASS
+
+  \item \textbf{Monotonic loss decrease.}
+        50~SGD steps on a small batch: loss decreased monotonically from $0.7260$ to $0.1563$.
+        \hfill$\checkmark$\;PASS
+
+  \item \textbf{Numerical gradient verification.}
+        Analytical gradients matched centred finite-difference approximations
+        ($\varepsilon{=}10^{-5}$) with maximum discrepancy below $10^{-4}$.
+        \hfill$\checkmark$\;PASS
+
+  \item \textbf{No NaN/Inf.}
+        After 20~epochs, all parameters were verified to be finite.
+        \hfill$\checkmark$\;PASS
+
+  \item \textbf{Overfitting a micro-dataset.}
+        An $H{=}16$ network trained on 10~samples for 200~Adam steps reached $100\%$ accuracy.
+        \hfill$\checkmark$\;PASS
+\end{enumerate}
+
+% ================================================================
+\section{Experiments}
+\label{sec:experiments}
+% ================================================================
+
+\subsection{Synthetic Decision Boundaries}
+
+\paragraph{Linear Gaussian.}
+Figure~\ref{fig:comparison_gaussian} shows that both models learn essentially the same
+straight boundary.  The neural network produces slightly different probability contours
+but the 50\%-probability line is identical.  This confirms Section~\ref{sec:geometry}:
+when the optimal boundary is a hyperplane, the hidden layer provides no advantage.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{../figures/comparison_lineargaussian.png}
+  \caption{Decision boundaries on the Linear Gaussian task.  Left: Softmax Regression.
+           Right: Neural Network ($H{=}32$).  Both produce a near-identical linear
+           separator.}
+  \label{fig:comparison_gaussian}
+\end{figure}
+
+\paragraph{Moons.}
+Figure~\ref{fig:comparison_moons} reveals the geometric difference.  Softmax Regression
+places a straight line through curved data, failing substantially.  The neural network
+maps the original 2-D space into $\R^{32}$ via $\tanh(\bW_1\bx+\bb_1)$, where the arcs
+become linearly separable, achieving near-$100\%$ accuracy.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{../figures/comparison_moons.png}
+  \caption{Decision boundaries on the Moons task.  Left: Softmax Regression (fails).
+           Right: Neural Network ($H{=}32$, succeeds).}
+  \label{fig:comparison_moons}
+\end{figure}
+
+% ──────────────────────────────────────────────────────────────────
+\subsection{Capacity Ablation on Moons}
+
+We trained the neural network on Moons with $H\in\{2,8,32\}$ (Figure~\ref{fig:ablation}):
+\begin{itemize}[leftmargin=1.4em,itemsep=0.15em]
+  \item $H{=}2$: angular, low-confidence boundaries---too few dimensions.
+  \item $H{=}8$: reasonable curved boundary, uneven confidence near the boundary.
+  \item $H{=}32$: smooth, high-confidence boundary tightly hugging the data manifold.
+\end{itemize}
+
+This demonstrates a monotonic relationship between hidden width and boundary quality
+\emph{on this task}, because the intrinsic complexity demands nonlinear expressiveness.
+On the Gaussian task, all three widths produce essentially the same linear boundary.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{../figures/capacity_ablation_boundaries.png}
+  \caption{Capacity ablation on Moons.  Left to right: $H{=}2$, $H{=}8$, $H{=}32$.}
+  \label{fig:ablation}
+\end{figure}
+
+% ──────────────────────────────────────────────────────────────────
+\subsection{Digits Benchmark}
+
+Table~\ref{tab:digits_main} summarises the core comparison with five-seed evaluation.
+
+\begin{table}[H]
+\centering
+\caption{Digits benchmark: five-seed summary (mean $\pm$ 95\% CI).}
+\label{tab:digits_main}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+\textbf{Model} & \textbf{Test Accuracy} & \textbf{Test Cross-Entropy} \\
+\midrule
+Softmax Regression & $93.26\%\;\pm\;0.73\%$ & $0.2692\;\pm\;0.0067$ \\
+Neural Network ($H{=}32$) & $95.71\%\;\pm\;0.91\%$ & $0.1566\;\pm\;0.0162$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The neural network improves accuracy by ${\sim}2.5$ percentage points and reduces
+cross-entropy by ${\sim}42\%$.  The $95\%$ confidence intervals do not overlap.  The CE
+reduction is proportionally larger than the accuracy gain, indicating better-calibrated
+probabilities.
+Figure~\ref{fig:loss_curves_digits} shows representative training dynamics; neither model
+exhibits severe overfitting within the 200-epoch budget.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{../figures/loss_curves_digits.png}
+  \caption{Training dynamics on the Digits benchmark (single representative seed).}
+  \label{fig:loss_curves_digits}
+\end{figure}
+
+% ──────────────────────────────────────────────────────────────────
+\subsection{Optimizer Study on Digits}
+\label{sec:optimizer}
+
+Three optimisers were compared on the neural network ($H{=}32$), shown in
+Table~\ref{tab:optimizers} and Figure~\ref{fig:optimizers}.
+
+\begin{table}[H]
+\centering
+\caption{Optimizer study on Digits (NN, $H{=}32$, best validation checkpoint).}
+\label{tab:optimizers}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Optimizer} & \textbf{Test Acc.} & \textbf{Test CE} & \textbf{Best Epoch} \\
+\midrule
+SGD ($\eta{=}0.05$) & 94.84\% & 0.1700 & 197 \\
+Momentum ($\eta{=}0.05,\;\mu{=}0.9$) & 95.38\% & 0.1653 & 197 \\
+Adam ($\eta{=}0.001$) & 95.11\% & 0.1507 & 197 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Adam and Momentum converge to low validation loss faster than plain SGD, but all three
+reach comparable final accuracy.  Adam achieves the lowest CE ($0.1507$), suggesting better
+calibration, while Momentum yields the highest accuracy ($95.38\%$).  The practical
+conclusion: for this task, optimiser choice has a secondary effect (${\sim}0.5$~ppt spread)
+relative to model-class choice (${\sim}2.5$~ppt gap).
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{../figures/optimizer_study_digits.png}
+  \caption{Validation loss and accuracy across optimisers (NN, $H{=}32$, Digits).}
+  \label{fig:optimizers}
+\end{figure}
+
+% ──────────────────────────────────────────────────────────────────
+\subsection{Failure-Case Analysis: Under-Capacity Bottleneck ($H{=}2$)}
+\label{sec:failure}
+
+We deliberately trained a network with $H{=}2$ on 10-class Digits.  The hidden layer
+compresses 64 dimensions to $[-1,1]^2$ before attempting 10-class classification.
+
+\begin{table}[H]
+\centering
+\caption{Failure case: $H{=}2$ bottleneck on Digits.}
+\label{tab:failure}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+\textbf{Model} & \textbf{Test Accuracy} & \textbf{Test Cross-Entropy} \\
+\midrule
+Softmax Regression (linear) & 93.26\% & 0.2692 \\
+NN ($H{=}2$) & 58.97\% & 1.1133 \\
+NN ($H{=}32$) & 95.71\% & 0.1566 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The $H{=}2$ model achieves only $58.97\%$---far below even the linear baseline.  A nonlinear
+model \emph{worse} than a linear one.
+
+\paragraph{Why it fails: a geometric argument.}
+The failure is \emph{representational}, not optimisational.  With $H{=}2$, the network maps
+$\R^{64}$ to $[-1,1]^2$.  The output layer has only 2~dimensions from which to carve 10
+regions---geometrically impossible for complex digit structure.  The optimiser faithfully
+minimises the loss within the architecture's constraints, but the global minimum itself
+corresponds to a poor classifier.  Both training and validation loss remain high
+(Figure~\ref{fig:failure}), confirming \emph{underfitting} due to capacity, not optimisation.
+
+\textbf{Lesson:} Representational capacity must match task complexity before optimisation can
+be effective.  Increasing $H$ from 2 to 32 expands the hypothesis class, enabling richer
+representations.  An insufficient bottleneck can \emph{destroy} information present in the
+original input, making the nonlinear model worse than the linear baseline.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{../figures/failure_analysis.png}
+  \caption{Failure case.  $H{=}2$ (red) underfits with high residual loss; $H{=}32$
+           (green) converges to low loss.}
+  \label{fig:failure}
+\end{figure}
+
+% ================================================================
+\section{Advanced Track A: PCA/SVD and Input Geometry}
+\label{sec:pca}
+% ================================================================
+
+We computed the SVD of the mean-centred training matrix
+$\bX_c = \bX - \bone\bar{\bx}^\top = \mathbf{U}\mathbf{\Sigma}\mathbf{V}^\top$
+to study the linear structure before any learning occurs.
+
+\paragraph{Scree analysis.}
+Figure~\ref{fig:pca_scree} shows rapid singular-value decay:
+
+\begin{center}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+Components $m$ & 5 & 10 & 20 & 40 \\
+\midrule
+Cumulative variance & 54.7\% & 74.1\% & 89.6\% & 98.9\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+The top 20 components capture $89.6\%$ of total variance; the remaining 44~dimensions
+contribute noise-level variance, indicating substantial low-dimensional structure.
+
+\paragraph{2-D projection.}
+Figure~\ref{fig:pca_2d} shows digits projected onto the first two PCs.  Digits 0 and 6
+form distinct clusters; digits 3, 5, and 8 overlap (shared curved strokes).  Two dimensions
+are insufficient for full separation but reveal meaningful coarse structure.
+
+\paragraph{Classification at reduced dimensions.}
+Table~\ref{tab:pca} shows Softmax accuracy on PCA-compressed inputs:
+
+\begin{table}[H]
+\centering
+\caption{Softmax Regression accuracy on PCA-reduced Digits inputs.}
+\label{tab:pca}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+$m$ & 10 & 20 & 40 & 64 (full) \\
+\midrule
+Val.\ Accuracy & 92.68\% & 94.08\% & 94.93\% & 95.49\% \\
+Val.\ CE Loss  & 0.2874  & 0.2292  & 0.2133  & 0.2109  \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+At $m{=}20$, Softmax still achieves $94.08\%$---only $1.4$ points below the full result.
+This reveals \textbf{substantial linear structure} in the input space.  The neural network's
+${\sim}2.5$-point advantage comes from exploiting \emph{residual nonlinear} interactions that
+PCA---a purely linear projection---cannot recover.
+
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{../figures/pca_scree_digits.png}
+    \caption{Scree plot and cumulative explained variance.}
+    \label{fig:pca_scree}
+  \end{subfigure}\hfill
+  \begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{../figures/pca_2d_digits.png}
+    \caption{2-D PCA projection of Digits classes.}
+    \label{fig:pca_2d}
+  \end{subfigure}
+  \caption{Track A: PCA/SVD analysis of the Digits dataset.}
+  \label{fig:pca}
+\end{figure}
+
+% ================================================================
+\section{Discussion: Interpretive Analysis}
+\label{sec:discussion}
+% ================================================================
+
+We answer the five core interpretive questions, drawing exclusively on the evidence above.
+
+\begin{enumerate}[leftmargin=2em,itemsep=0.5em]
+
+\item \textbf{When is the linear model geometrically sufficient, and when is it not?}
+
+The linear model suffices when the Bayes-optimal boundary is a hyperplane.  This holds
+rigorously for the Gaussian task (Equation~\ref{eq:logodds}) and approximately for Digits,
+where Softmax reaches $93.26\%$ and PCA confirms that dominant discriminative directions
+are linear.  The linear model is \emph{insufficient} on Moons, where no affine function
+separates the arcs (Figure~\ref{fig:comparison_moons}).
+
+\item \textbf{What representational change does the hidden layer provide?}
+
+The map $\bh = \tanh(\bW_1\bx+\bb_1)$ is a learned nonlinear coordinate change from
+$\R^d$ to $\R^H$.  On Moons, it ``untwists'' the arcs into linearly separable clusters
+in $\R^{32}$.  On Digits, it captures nonlinear feature combinations (stroke curvatures,
+junctions) that linear projections cannot, accounting for the ${\sim}2.5$-point gain.  The
+PCA comparison confirms this gain is from \emph{nonlinear} structure.
+
+\item \textbf{When does additional model complexity fail to justify itself?}
+
+\emph{(a)} When the baseline captures the geometry: on Gaussian, the NN matches Softmax
+with $3.7{\times}$ more parameters.  \emph{(b)} When complexity is of the wrong kind:
+Softmax at $m{=}20$ PCA dimensions ($94.08\%$) is within $1.6$ points of the full NN
+($95.71\%$).  If the engineering cost is high and the gap is tolerable, the simpler model
+may be preferable.
+
+\item \textbf{What does your failure case teach about optimisation, capacity, or
+generalisation?}
+
+The $H{=}2$ bottleneck teaches that \emph{capacity is a prerequisite optimisation cannot
+substitute}.  Identical optimiser settings yield $58.97\%$ ($H{=}2$) versus $95.71\%$
+($H{=}32$).  This distinguishes three failure modes:
+\begin{itemize}[leftmargin=1.4em,itemsep=0.1em]
+  \item \emph{Optimisation failure}: architecture can represent a solution, optimiser can't
+        find it.
+  \item \emph{Capacity failure}: architecture \emph{cannot} represent a solution.  $\leftarrow$ this case.
+  \item \emph{Generalisation failure}: model fits training but not test data.
+\end{itemize}
+The $H{=}2$ case is pure capacity failure: increasing $H$ expands the hypothesis class,
+not the optimiser.
+
+\item \textbf{What do repeated-seed statistics add beyond a single run?}
+
+A single run depends on random initialisation and mini-batch order.  Five seeds with
+$\bar{x}\pm 2.776 \cdot s/\!\sqrt{5}$ bound \emph{expected} performance.  Tight intervals
+(Softmax: $\pm 0.73\%$; NN: $\pm 0.91\%$) confirm the ${\sim}2.5$-point gap is robust,
+not from one lucky seed.  The NN's wider interval reflects more initialisation sensitivity
+from additional parameters.
+
+\end{enumerate}
+
+% ================================================================
+\section{Limitations}
+\label{sec:limitations}
+% ================================================================
+
+\begin{enumerate}[leftmargin=2em,itemsep=0.25em]
+  \item \textbf{Architectural scope.}
+        Single hidden layer, $\tanh$ only, $H\leq 32$.  Conclusions do not extend to
+        deeper networks, wider layers, or other activations (ReLU, GELU).
+
+  \item \textbf{Dataset scale.}
+        Digits: $d{=}64$, $K{=}10$, ${\sim}1{,}800$ samples.  Results may not generalise
+        to high-resolution images or tasks with hundreds of classes.
+
+  \item \textbf{Optimiser exploration.}
+        Each optimiser tested at one fixed setting.  We cannot claim SGD is fundamentally
+        inferior to Adam; different schedules could change the ranking.
+
+  \item \textbf{Regularisation.}
+        Only $L_2$ ($\lambda{=}10^{-4}$).  Dropout, batch normalisation, or LR scheduling
+        might shift the NN's relative advantage.
+
+  \item \textbf{Repeated-seed sample size.}
+        Five seeds assume approximate normality, hard to verify with $n{=}5$.
+
+  \item \textbf{Synthetic task simplicity.}
+        2-D, 400~points, noise-free labels---illustrative but not representative of
+        real-world ambiguity.
+
+  \item \textbf{Single data split.}
+        Cross-validation would be more robust but was outside scope.
+
+  \item \textbf{No formal calibration analysis.}
+        CE reduction suggests better calibration, but no reliability diagrams or ECE
+        were computed.
+\end{enumerate}
+
+Our findings reliably characterise the specific comparison on these three tasks under
+this fixed protocol.  They should not be overgeneralised to deeper architectures, larger
+datasets, or more sophisticated training pipelines.
+
+% ================================================================
+\newpage
+\section*{References}
+% ================================================================
+\begin{enumerate}[label={[\arabic*]},leftmargin=2em,itemsep=0.2em]
+  \item Deisenroth,~M.\,P., Faisal,~A.\,A., \& Ong,~C.\,S.\ (2020). \textit{Mathematics
+        for Machine Learning}. Cambridge University Press.
+  \item Murphy,~K.\,P.\ (2022). \textit{Probabilistic Machine Learning: An Introduction}.
+        MIT Press.
+  \item Goodfellow,~I., Bengio,~Y., \& Courville,~A.\ (2016). \textit{Deep Learning}. MIT
+        Press.
+  \item Ng,~A.\ \& Katanforoosh,~K. \textit{CS229 Lecture Notes: Deep Learning}. Stanford
+        University.  Available at \url{https://cs229.stanford.edu/}.
+  \item Stanford CS231n staff. \textit{Neural Networks Part 1: Setting up the Architecture}.
+        \url{https://cs231n.github.io/neural-networks-1/}
+  \item Stanford CS231n staff. \textit{Optimization Part 2: Backpropagation, Intuitions}.
+        \url{https://cs231n.github.io/optimization-2/}
+  \item ETH Zurich Learning and Adaptive Systems Group. \textit{Introduction to Machine
+        Learning Course Notes}.
+        \url{https://las.inf.ethz.ch/teaching/introml-s24}
+  \item GitHub. \textit{GitHub Flow}.
+        \url{https://docs.github.com/en/get-started/using-github/github-flow}
+  \item MIT CSAIL. \textit{The Missing Semester of Your CS Education: Version Control (Git)}.
+        \url{https://missing.csail.mit.edu/2020/version-control/}
+  \item Math4AI Program Handout: \textit{Math4AI Capstone: From Linear Scores to a Single
+        Hidden Layer}. National AI Center --- AI Academy, 2026.
+\end{enumerate}
+
+\end{document}

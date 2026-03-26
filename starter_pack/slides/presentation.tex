@@ -1,17 +1,20 @@
 \documentclass[11pt,aspectratio=169]{beamer}
 
-\usetheme{Madrid}
-\usecolortheme{whale}
+% Clean minimal theme
+\usetheme{Boadilla}
+\usefonttheme[onlymath]{serif}
+\useinnertheme{circles}
 \setbeamertemplate{navigation symbols}{}
+
 \setbeamertemplate{footline}{%
   \leavevmode\hbox{%
-    \begin{beamercolorbox}[wd=.33\paperwidth,ht=2.5ex,dp=1ex,center]{author in head/foot}%
+    \begin{beamercolorbox}[wd=.33\paperwidth,ht=2.25ex,dp=1ex,center]{author in head/foot}%
       \usebeamerfont{author in head/foot}\insertshortauthor
     \end{beamercolorbox}%
-    \begin{beamercolorbox}[wd=.34\paperwidth,ht=2.5ex,dp=1ex,center]{title in head/foot}%
+    \begin{beamercolorbox}[wd=.34\paperwidth,ht=2.25ex,dp=1ex,center]{title in head/foot}%
       \usebeamerfont{title in head/foot}\insertshorttitle
     \end{beamercolorbox}%
-    \begin{beamercolorbox}[wd=.33\paperwidth,ht=2.5ex,dp=1ex,right]{date in head/foot}%
+    \begin{beamercolorbox}[wd=.33\paperwidth,ht=2.25ex,dp=1ex,right]{date in head/foot}%
       \usebeamerfont{date in head/foot}\insertframenumber{} / \inserttotalframenumber\hspace*{2ex}
     \end{beamercolorbox}%
   }\vskip0pt%
@@ -19,6 +22,8 @@
 
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
+\usepackage[scaled=0.92]{helvet}
+\renewcommand{\familydefault}{\sfdefault}
 \usepackage{amsmath,amssymb}
 \usepackage{booktabs}
 \usepackage{graphicx}
@@ -27,19 +32,41 @@
 
 \graphicspath{{../figures/}}
 
-\definecolor{accentblue}{HTML}{2471A3}
-\definecolor{accentred}{HTML}{C0392B}
+% Soft color palette
+\definecolor{softnavy}{HTML}{2C3E50}
+\definecolor{softteal}{HTML}{2980B9}
+\definecolor{accentblue}{HTML}{2980B9}
+\definecolor{accentred}{HTML}{E74C3C}
 \definecolor{accentgreen}{HTML}{27AE60}
-\definecolor{lightgray}{HTML}{F2F3F4}
+\definecolor{lightgray}{HTML}{ECF0F1}
+\definecolor{warmgray}{HTML}{F4F6F7}
+\definecolor{darktext}{HTML}{2C3E50}
 
-\setbeamercolor{block title}{bg=accentblue,fg=white}
-\setbeamercolor{block body}{bg=lightgray,fg=black}
+% Beamer color scheme
+\setbeamercolor{structure}{fg=softnavy}
+\setbeamercolor{palette primary}{bg=softnavy,fg=white}
+\setbeamercolor{palette secondary}{bg=softteal,fg=white}
+\setbeamercolor{palette tertiary}{bg=softnavy,fg=white}
+\setbeamercolor{frametitle}{fg=softnavy,bg=warmgray}
+\setbeamercolor{title}{fg=softnavy}
+\setbeamercolor{block title}{bg=softteal,fg=white}
+\setbeamercolor{block body}{bg=lightgray,fg=darktext}
+\setbeamercolor{item}{fg=softteal}
+\setbeamercolor{normal text}{fg=darktext}
+\setbeamercolor{author in head/foot}{bg=softnavy,fg=white}
+\setbeamercolor{title in head/foot}{bg=softteal!80,fg=white}
+\setbeamercolor{date in head/foot}{bg=softnavy!80,fg=white}
+
+% Softer typography
+\setbeamerfont{title}{series=\bfseries,size=\Large}
+\setbeamerfont{frametitle}{series=\bfseries,size=\large}
 
 \title[Math4AI Capstone]{From Linear Scores to a Single Hidden Layer}
 \subtitle{A Mathematical Study of Simple Learning Systems}
 \author[Feyzullayev, Samadov, Abdullazade]{Sharaf Feyzullayev \and Nicat Samadov \and Samir Abdullazade}
 \institute{National AI Center --- AI Academy}
 \date{Math4AI Final Capstone, March 2026}
+\titlegraphic{\vspace{-0.5em}\includegraphics[width=4cm]{ai_academy_logo.png}}
 
 \begin{document}
 
