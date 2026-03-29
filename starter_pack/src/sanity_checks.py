@@ -115,10 +115,13 @@ def main():
         opt_sgd.step(sr.params, sr.grads)
         print(f"    step {step:2d} | loss = {loss:.4f}")
 
-    if losses[-1] < losses[0]:
-        print(f"  CHECK 2 PASS: loss decreased from {losses[0]:.4f} → {losses[-1]:.4f}")
+    # Check if the sequence is strictly monotonically decreasing
+    is_decreasing = all(losses[i] < losses[i-1] for i in range(1, len(losses)))
+    
+    if is_decreasing:
+        print(f"  CHECK 2 PASS: loss decreased monotonically from {losses[0]:.4f} → {losses[-1]:.4f}")
     else:
-        print("  CHECK 2 FAIL: loss did not decrease")
+        print("  CHECK 2 FAIL: loss did not decrease monotonically")
         passed_all = False
 
     # ----------------------------------------------------------
@@ -142,21 +145,25 @@ def main():
         grad_analytical = nn_g.grads[param_key]
         flat = nn_g.params[param_key].ravel()
         grad_flat_analytical = grad_analytical.ravel()
-        # Check first 6 entries of each parameter (avoids very long runtime)
+        
         n_check = min(6, len(flat))
         diffs = []
         for idx in range(n_check):
             orig = flat[idx]
+            
+            # f(x + eps)
             flat[idx] = orig + eps
             nn_g.params[param_key] = flat.reshape(nn_g.params[param_key].shape)
             P_p, _ = nn_g.forward(X_g)
             loss_p = cross_entropy_loss(P_p, Y_g_oh)
 
+            # f(x - eps)
             flat[idx] = orig - eps
             nn_g.params[param_key] = flat.reshape(nn_g.params[param_key].shape)
             P_m, _ = nn_g.forward(X_g)
             loss_m = cross_entropy_loss(P_m, Y_g_oh)
 
+            # Restore original value
             flat[idx] = orig
             nn_g.params[param_key] = flat.reshape(nn_g.params[param_key].shape)
 
@@ -177,32 +184,23 @@ def main():
     # CHECK 4: No NaN or Inf in parameters after training
     # ----------------------------------------------------------
     print("\n[Check 4] No NaN or Inf values produced during training")
+    X_nan = rng2.standard_normal((50, 4))
+    y_nan = rng2.integers(0, 3, size=50)
+    Y_nan_oh = one_hot(y_nan, 3)
+
     nn_nan = NeuralNetwork(n_features=4, n_hidden=8, n_classes=3)
     nn_nan.init_params(seed=7)
     opt_nan = SGD(lr=0.05)
     opt_nan.init_state(nn_nan.params)
 
     for _ in range(30):
-        P_nan, cache_nan = nn_nan.forward(X_small[:, :4] if X_small.shape[1] >= 4 else X_small)
-        # Use 4-feature data
-    # rebuild with correct shape
-    X_nan = rng2.standard_normal((50, 4))
-    y_nan = rng2.integers(0, 3, size=50)
-    Y_nan_oh = one_hot(y_nan, 3)
-
-    nn_nan2 = NeuralNetwork(n_features=4, n_hidden=8, n_classes=3)
-    nn_nan2.init_params(seed=7)
-    opt_nan2 = SGD(lr=0.05)
-    opt_nan2.init_state(nn_nan2.params)
-
-    for _ in range(30):
-        P_n, cache_n = nn_nan2.forward(X_nan)
-        nn_nan2.backward(cache_n, Y_nan_oh, lam=1e-4)
-        opt_nan2.step(nn_nan2.params, nn_nan2.grads)
+        P_n, cache_n = nn_nan.forward(X_nan)
+        nn_nan.backward(cache_n, Y_nan_oh, lam=1e-4)
+        opt_nan.step(nn_nan.params, nn_nan.grads)
 
     has_bad = any(
         np.any(np.isnan(v)) or np.any(np.isinf(v))
-        for v in nn_nan2.params.values()
+        for v in nn_nan.params.values()
     )
     print(f"  NaN/Inf detected in parameters after 30 epochs: {has_bad}")
     if not has_bad:
@@ -233,11 +231,11 @@ def main():
         opt_of.step(nn_of.params, nn_of.grads)
 
     preds_of, _ = nn_of.predict(X_tiny)
-    final_loss = cross_entropy_loss(*nn_of.forward(X_tiny)[:1], Y_tiny_oh)
-    # recompute for display
+    
     P_final, _ = nn_of.forward(X_tiny)
     final_loss = cross_entropy_loss(P_final, Y_tiny_oh)
     final_acc = np.mean(preds_of == y_tiny)
+    
     print(f"  Final training loss : {final_loss:.6f}")
     print(f"  Final training accuracy: {final_acc * 100:.1f}%  (expected 100%)")
 

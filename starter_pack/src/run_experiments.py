@@ -12,16 +12,6 @@ Runs ALL required experiments:
   6. Failure-case analysis
   7. Implementation sanity checks
 
-FIX APPLIED (vs original):
-  - run_digits_experiment() now uses the final selected config (Adam, lr=0.001)
-    for the NN, so that loss_curves_digits.png represents the same configuration
-    that appears in the five-seed summary table.  Previously it used SGD, which
-    created an inconsistency: the figure showed SGD dynamics while Table 1
-    reported Adam (5-seed) numbers.
-  - run_synthetic_experiments() now saves accuracy results to
-    results/synthetic_results.txt so all experiment numbers are on file.
-  - run_sanity_checks() now saves output to results/sanity_checks.txt
-    (previously it only printed to stdout).
 
 Usage:
   python -m starter_pack.src.run_experiments
@@ -57,6 +47,9 @@ from starter_pack.src.plotting import (
     get_figures_dir
 )
 
+# DRY Principle: Import the standalone sanity check logic
+from starter_pack.src.sanity_checks import main as run_standalone_sanity_checks
+
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -66,132 +59,22 @@ RESULTS_DIR.mkdir(exist_ok=True)
 
 
 # ============================================================
-#  SANITY CHECKS  (also writes to results/sanity_checks.txt)
+#  SANITY CHECKS 
 # ============================================================
 
 def run_sanity_checks():
     """Run the 5 implementation sanity checks and save results to file.
 
-    This mirrors the standalone sanity_checks.py but is integrated into the
-    full experiment pipeline so results/sanity_checks.txt is always current.
+    This function delegates the actual execution to the standalone 
+    sanity_checks.py script to enforce the DRY (Don't Repeat Yourself) principle.
     """
     print("=" * 62)
     print("SANITY CHECKS")
     print("=" * 62)
-
-    log_lines = [
-        "=" * 62,
-        "  MATH4AI CAPSTONE: IMPLEMENTATION SANITY CHECKS",
-        "=" * 62,
-    ]
-
-    def log(msg=""):
-        print(msg)
-        log_lines.append(msg)
-
-    # Check 1: softmax sum to 1
-    log("\n[Check 1] Softmax probabilities sum to 1")
-    Z = np.array([[1.0, 2.0, 3.0], [1.0, 1.0, 1.0], [-100.0, 0.0, 100.0]])
-    P = stable_softmax(Z)
-    sums = P.sum(axis=1)
-    log(f"  Row sums: {sums}")
-    assert np.allclose(sums, 1.0), "FAIL"
-    log("  CHECK 1 PASS")
-
-    # Check 2: loss decreases
-    log("\n[Check 2] Loss decreases monotonically")
-    rng = np.random.default_rng(0)
-    X_tiny = rng.standard_normal((10, 2))
-    y_tiny = np.array([0, 1, 0, 1, 0, 1, 0, 1, 0, 1])
-    model = SoftmaxRegression(2, 2)
-    model.init_params(seed=0)
-    opt = SGD(lr=0.5)
-    opt.init_state(model.params)
-    losses = []
-    for _ in range(50):
-        P2, cache = model.forward(X_tiny)
-        Y_oh = one_hot(y_tiny, 2)
-        loss = cross_entropy_loss(P2, Y_oh)
-        losses.append(loss)
-        model.backward(cache, Y_oh)
-        opt.step(model.params, model.grads)
-    log(f"  Initial loss: {losses[0]:.4f}, Final loss: {losses[-1]:.4f}")
-    assert losses[-1] < losses[0], "FAIL"
-    log("  CHECK 2 PASS")
-
-    # Check 3: numerical gradient check
-    log("\n[Check 3] Numerical gradient verification (analytical vs finite-difference)")
-    model_check = NeuralNetwork(2, 4, 2)
-    model_check.init_params(seed=42)
-    rng2 = np.random.default_rng(1)
-    X_g = rng2.standard_normal((5, 2))
-    y_g = np.array([0, 1, 0, 1, 0])
-    Y_oh_g = one_hot(y_g, 2)
-    P_g, cache_g = model_check.forward(X_g)
-    model_check.backward(cache_g, Y_oh_g)
-    eps = 1e-5
-    for param_key in ['W1', 'W2', 'b1', 'b2']:
-        grad_analytical = model_check.grads[param_key].copy()
-        flat = model_check.params[param_key].ravel()
-        grad_flat = grad_analytical.ravel()
-        n_check = min(4, len(flat))
-        max_diff = 0.0
-        for idx in range(n_check):
-            orig = flat[idx]
-            flat[idx] = orig + eps
-            model_check.params[param_key] = flat.reshape(model_check.params[param_key].shape)
-            P_p, _ = model_check.forward(X_g)
-            l_p = cross_entropy_loss(P_p, Y_oh_g)
-            flat[idx] = orig - eps
-            model_check.params[param_key] = flat.reshape(model_check.params[param_key].shape)
-            P_m, _ = model_check.forward(X_g)
-            l_m = cross_entropy_loss(P_m, Y_oh_g)
-            flat[idx] = orig
-            model_check.params[param_key] = flat.reshape(model_check.params[param_key].shape)
-            max_diff = max(max_diff, abs(grad_flat[idx] - (l_p - l_m) / (2 * eps)))
-        log(f"  {param_key}: max |analytical - numerical| = {max_diff:.2e}")
-        assert max_diff < 1e-4, f"FAIL for {param_key}"
-    log("  CHECK 3 PASS")
-
-    # Check 4: No NaN/Inf
-    log("\n[Check 4] No NaN/Inf in parameters after training")
-    model_nan = NeuralNetwork(2, 8, 2)
-    model_nan.init_params(seed=7)
-    opt_nan = SGD(lr=0.05)
-    opt_nan.init_state(model_nan.params)
-    Y_tiny_oh = one_hot(y_tiny, 2)
-    for _ in range(20):
-        P_n, cache_n = model_nan.forward(X_tiny)
-        model_nan.backward(cache_n, Y_tiny_oh, lam=1e-4)
-        opt_nan.step(model_nan.params, model_nan.grads)
-    has_nan = any(np.any(np.isnan(v)) or np.any(np.isinf(v))
-                  for v in model_nan.params.values())
-    log(f"  NaN/Inf detected: {has_nan}")
-    assert not has_nan, "FAIL"
-    log("  CHECK 4 PASS")
-
-    # Check 5: overfit tiny subset
-    log("\n[Check 5] Overfit tiny dataset to 100% accuracy")
-    model_of = NeuralNetwork(2, 16, 2)
-    model_of.init_params(seed=0)
-    opt_of = Adam(lr=0.05)
-    opt_of.init_state(model_of.params)
-    for _ in range(200):
-        P_of, cache_of = model_of.forward(X_tiny)
-        model_of.backward(cache_of, Y_tiny_oh, lam=0.0)
-        opt_of.step(model_of.params, model_of.grads)
-    preds_of, _ = model_of.predict(X_tiny)
-    final_acc = np.mean(preds_of == y_tiny)
-    log(f"  Final train accuracy on 10-sample subset: {final_acc:.4f}")
-    assert final_acc >= 0.99, "FAIL"
-    log("  CHECK 5 PASS")
-
-    log("\n[OK] All 5 sanity checks passed!")
-
-    # Save to file
-    with open(RESULTS_DIR / "sanity_checks.txt", "w", encoding="utf-8") as f:
-        f.write("\n".join(log_lines))
-    print(f"  Saved: results/sanity_checks.txt")
+    print("Delegating to standalone sanity_checks.py...\n")
+    
+    # Run the main function from sanity_checks.py
+    run_standalone_sanity_checks()
 
 
 # ============================================================
@@ -202,7 +85,7 @@ def run_synthetic_experiments():
     """Train and compare both models on linear Gaussian and moons.
     Saves a text summary to results/synthetic_results.txt.
     """
-    print("=" * 62)
+    print("\n" + "=" * 62)
     print("EXPERIMENT 1: SYNTHETIC TASKS")
     print("=" * 62)
 
@@ -298,9 +181,6 @@ def run_digits_experiment():
     based on validation evidence (lowest CE in optimizer study).  This ensures
     loss_curves_digits.png is consistent with the five-seed summary table, which
     also uses Adam for the NN.
-
-    Previously: NN used SGD (lr=0.05), creating an inconsistency where
-    the figure showed SGD dynamics but Table 1 reported Adam results.
     """
     print("\n" + "=" * 62)
     print("EXPERIMENT 2: DIGITS BENCHMARK")
