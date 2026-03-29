@@ -2,9 +2,13 @@
 Professional plotting utilities for Math4AI Capstone.
 High-quality decision boundaries, loss curves, and analysis plots.
 Designed for jury presentation quality.
+
+Fix applied: replaced deprecated plt.cm.get_cmap() with
+matplotlib.colormaps[] (matplotlib >= 3.7 compatible).
 """
 
 import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from matplotlib.lines import Line2D
@@ -36,6 +40,22 @@ MULTI_COLORS = ['#E74C3C', '#3498DB', '#2ECC71', '#9B59B6', '#F39C12',
                 '#1ABC9C', '#E67E22', '#34495E', '#E91E63', '#00BCD4']
 
 
+def _get_cmap(name, n=None):
+    """
+    Compatibility wrapper: returns a colormap regardless of matplotlib version.
+    Replaces deprecated plt.cm.get_cmap().
+    """
+    try:
+        # matplotlib >= 3.7
+        cmap = matplotlib.colormaps[name]
+        if n is not None:
+            cmap = cmap.resampled(n)
+        return cmap
+    except AttributeError:
+        # matplotlib < 3.7 fallback
+        return plt.cm.get_cmap(name, n)
+
+
 def get_figures_dir():
     """Return path to the figures directory, creating it if needed."""
     fig_dir = Path(__file__).resolve().parents[1] / "figures"
@@ -45,14 +65,9 @@ def get_figures_dir():
 
 def plot_decision_boundary(model, X, y, title="Decision Boundary",
                            filename=None, resolution=300):
-    """Plot 2D decision boundary with probability heatmap and data overlay.
-
-    Shows the full probability landscape (not just hard predictions),
-    making it easy to see confidence gradients and boundary curvature.
-    """
+    """Plot 2D decision boundary with probability heatmap and data overlay."""
     fig, ax = plt.subplots(1, 1, figsize=(8, 6.5))
 
-    # Build the mesh grid
     margin = 0.8
     x_min, x_max = X[:, 0].min() - margin, X[:, 0].max() + margin
     y_min, y_max = X[:, 1].min() - margin, X[:, 1].max() + margin
@@ -60,21 +75,14 @@ def plot_decision_boundary(model, X, y, title="Decision Boundary",
                          np.linspace(y_min, y_max, resolution))
     grid = np.c_[xx.ravel(), yy.ravel()]
 
-    # Get probability of class 1 (for binary) or prediction for multiclass
     _, P = model.predict(grid)
     if P.shape[1] == 2:
-        # Binary: use probability of class 1 as the heatmap
         prob_map = P[:, 1].reshape(xx.shape)
 
-        # Probability heatmap with smooth gradient
         im = ax.contourf(xx, yy, prob_map, levels=np.linspace(0, 1, 50),
                          cmap=PROB_CMAP, alpha=0.85)
-
-        # Bold decision boundary contour at p=0.5
         ax.contour(xx, yy, prob_map, levels=[0.5],
                    colors='#2C3E50', linewidths=2.5, linestyles='-')
-
-        # Lighter probability contours
         ax.contour(xx, yy, prob_map, levels=[0.2, 0.35, 0.65, 0.8],
                    colors='#7F8C8D', linewidths=0.6, linestyles='--', alpha=0.5)
 
@@ -82,7 +90,6 @@ def plot_decision_boundary(model, X, y, title="Decision Boundary",
         cbar.set_label('P(class = 1)', fontsize=11)
         cbar.set_ticks([0, 0.25, 0.5, 0.75, 1.0])
 
-        # Data points with class-specific styling
         for cls_val, color, marker, label in [(0, CLASS_COLORS[0], 'o', 'Class 0'),
                                                (1, CLASS_COLORS[1], 's', 'Class 1')]:
             mask = y == cls_val
@@ -90,10 +97,10 @@ def plot_decision_boundary(model, X, y, title="Decision Boundary",
                        edgecolors='white', linewidths=0.5, s=30, alpha=0.85,
                        label=label, zorder=5)
     else:
-        # Multiclass: show class regions + points
         preds = np.argmax(P, axis=1).reshape(xx.shape)
         n_classes = P.shape[1]
-        cmap = plt.cm.get_cmap('tab10', n_classes)
+        # FIX: use _get_cmap() instead of deprecated plt.cm.get_cmap()
+        cmap = _get_cmap('tab10', n_classes)
         ax.contourf(xx, yy, preds, levels=np.arange(-0.5, n_classes, 1),
                     cmap=cmap, alpha=0.3)
         ax.contour(xx, yy, preds, colors='k', linewidths=0.5, alpha=0.3)
@@ -119,10 +126,7 @@ def plot_decision_boundary(model, X, y, title="Decision Boundary",
 
 def plot_decision_boundary_comparison(models, X, y, titles,
                                       filename=None, resolution=300):
-    """Side-by-side decision boundary comparison.
-
-    Shows 2 or more models side by side with identical axes for fair comparison.
-    """
+    """Side-by-side decision boundary comparison."""
     n_models = len(models)
     fig, axes = plt.subplots(1, n_models, figsize=(7 * n_models, 6))
     if n_models == 1:
@@ -135,6 +139,7 @@ def plot_decision_boundary_comparison(models, X, y, titles,
                          np.linspace(y_min, y_max, resolution))
     grid = np.c_[xx.ravel(), yy.ravel()]
 
+    im = None
     for ax, model, title in zip(axes, models, titles):
         _, P = model.predict(grid)
         if P.shape[1] == 2:
@@ -160,11 +165,11 @@ def plot_decision_boundary_comparison(models, X, y, titles,
         ax.set_xlim(x_min, x_max)
         ax.set_ylim(y_min, y_max)
 
-    # Shared colorbar
-    cbar_ax = fig.add_axes([0.92, 0.15, 0.015, 0.7])
-    cbar = fig.colorbar(im, cax=cbar_ax)
-    cbar.set_label('P(class = 1)', fontsize=11)
-    cbar.set_ticks([0, 0.25, 0.5, 0.75, 1.0])
+    if im is not None:
+        cbar_ax = fig.add_axes([0.92, 0.15, 0.015, 0.7])
+        cbar = fig.colorbar(im, cax=cbar_ax)
+        cbar.set_label('P(class = 1)', fontsize=11)
+        cbar.set_ticks([0, 0.25, 0.5, 0.75, 1.0])
 
     fig.subplots_adjust(right=0.90, wspace=0.25)
 
@@ -177,10 +182,7 @@ def plot_decision_boundary_comparison(models, X, y, titles,
 
 def plot_capacity_ablation_boundaries(models_dict, X, y,
                                        filename=None, resolution=300):
-    """Side-by-side decision boundaries for capacity ablation.
-
-    Shows h=2, h=8, h=32 in a single row for direct comparison.
-    """
+    """Side-by-side decision boundaries for capacity ablation."""
     widths = sorted(models_dict.keys())
     n = len(widths)
     fig, axes = plt.subplots(1, n, figsize=(6.5 * n, 5.5))
@@ -194,6 +196,7 @@ def plot_capacity_ablation_boundaries(models_dict, X, y,
                          np.linspace(y_min, y_max, resolution))
     grid = np.c_[xx.ravel(), yy.ravel()]
 
+    im = None
     for ax, h_w in zip(axes, widths):
         model = models_dict[h_w]
         _, P = model.predict(grid)
@@ -219,9 +222,10 @@ def plot_capacity_ablation_boundaries(models_dict, X, y,
         ax.set_xlim(x_min, x_max)
         ax.set_ylim(y_min, y_max)
 
-    cbar_ax = fig.add_axes([0.93, 0.15, 0.012, 0.7])
-    cbar = fig.colorbar(im, cax=cbar_ax)
-    cbar.set_label('P(class = 1)', fontsize=11)
+    if im is not None:
+        cbar_ax = fig.add_axes([0.93, 0.15, 0.012, 0.7])
+        cbar = fig.colorbar(im, cax=cbar_ax)
+        cbar.set_label('P(class = 1)', fontsize=11)
 
     fig.suptitle('Capacity Ablation: Decision Boundaries on Moons',
                  fontsize=15, fontweight='bold', y=1.02)
@@ -356,7 +360,7 @@ def plot_optimizer_comparison(histories_dict, title="Optimizer Study (Digits)",
 def plot_pca_scree(explained_variance_ratio, filename=None):
     """Scree plot with bars and cumulative line."""
     fig, ax = plt.subplots(1, 1, figsize=(9, 5.5))
-    n = min(len(explained_variance_ratio), 40)  # show top 40
+    n = min(len(explained_variance_ratio), 40)
     cumulative = np.cumsum(explained_variance_ratio[:n])
 
     ax.bar(range(1, n + 1), explained_variance_ratio[:n], alpha=0.65,
@@ -386,7 +390,7 @@ def plot_pca_scree(explained_variance_ratio, filename=None):
 
 
 def plot_pca_2d(X_2d, y, filename=None):
-    """2D PCA scatter of digits – each class gets its own color."""
+    """2D PCA scatter of digits — each class gets its own color."""
     fig, ax = plt.subplots(1, 1, figsize=(9, 7))
     classes = np.unique(y)
 
@@ -418,7 +422,6 @@ def plot_pca_softmax_comparison(dims, val_accs, val_losses, filename=None):
 
     x = np.arange(len(dims))
     labels = [str(d) for d in dims]
-    # Use a single color for all bars to avoid confusion, since x-axis defines the category
     bar_color = '#3498DB'
 
     bars = axes[0].bar(x, val_accs, color=bar_color, alpha=0.85,

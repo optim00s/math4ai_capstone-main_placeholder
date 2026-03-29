@@ -53,7 +53,7 @@ class Momentum:
 
 
 class Adam:
-    """Adam optimizer (Kingma & Ba, 2015).
+    """Adam optimizer.
 
     m_t = β1 * m_{t-1} + (1-β1) * g_t
     v_t = β2 * v_{t-1} + (1-β2) * g_t^2

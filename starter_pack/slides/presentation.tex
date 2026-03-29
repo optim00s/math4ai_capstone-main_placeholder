@@ -65,7 +65,7 @@
 \subtitle{A Mathematical Study of Simple Learning Systems}
 \author[Feyzullayev, Samadov, Abdullazade]{Sharaf Feyzullayev \and Nicat Samadov \and Samir Abdullazade}
 \institute{National AI Center --- AI Academy}
-\date{Math4AI Final Capstone, March 2026}
+\date{Math4AI Final Capstone, April 2026}
 \titlegraphic{\vspace{-0.5em}\includegraphics[width=4cm]{ai_academy_logo.png}}
 
 \begin{document}
@@ -88,18 +88,13 @@
 
 \vspace{0.6em}
 
-\textbf{Our approach --- argue from evidence, not preference:}
+\textbf{Our approach - argue from evidence, not preference:}
 \begin{itemize}
     \item Compare \textbf{softmax regression} (linear baseline) against a \textbf{one-hidden-layer neural network} ($\tanh$ + softmax)
     \item Three datasets of increasing geometric complexity: Gaussian blobs, moons, digits
     \item Derive the mathematics that each model relies on, then test experimentally
-    \item \textbf{More complexity is not automatically better} --- if the linear baseline is sufficient, we say so and justify it
+    \item \textbf{More complexity is not automatically better}, if the linear baseline is sufficient, we say so and justify it
 \end{itemize}
-
-\vspace{0.3em}
-\centering
-\small\textcolor{accentblue}{\textbf{Everything implemented from scratch in NumPy --- no autograd, no PyTorch, no scikit-learn}}
-
 \end{frame}
 
 % ──────────────────────────────────────────
@@ -133,7 +128,7 @@ Both models are evaluated under \textbf{identical conditions} to ensure a fair c
 
 \vspace{0.4em}
 \textbf{Key principle:}\\
-The NN must \textit{earn} its complexity through evidence --- the linear baseline is the default.
+The NN must \textit{earn} its complexity through evidence - the linear baseline is the default.
 \end{column}
 \end{columns}
 
@@ -228,11 +223,11 @@ Both minimise cross-entropy: $\;\mathcal{L} = -\frac{1}{n}\sum_i \log p_{y_i}(x_
 Bayes-optimal boundary is a hyperplane $\Rightarrow$ \textbf{linear model suffices}.
 \end{block}
 
-\textbf{Mathematical reason:}\\[2pt]
-{\small For shared covariance $\sigma^2 I$, the log-odds are \textit{affine} in $x$:}
-{\small\[
-\log\frac{P(y\!=\!1|x)}{P(y\!=\!0|x)} = \frac{(\mu_1-\mu_0)^\top x}{\sigma^2} + c
-\]}
+% \textbf{Mathematical reason:}\\[2pt]
+% {\small For shared covariance $\sigma^2 I$, the log-odds are \textit{affine} in $x$:}
+% {\small\[
+% \log\frac{P(y\!=\!1|x)}{P(y\!=\!0|x)} = \frac{(\mu_1-\mu_0)^\top x}{\sigma^2} + c
+% \]}
 
 \begin{itemize}
     \item Both models learn the same boundary
@@ -255,7 +250,7 @@ Bayes-optimal boundary is a hyperplane $\Rightarrow$ \textbf{linear model suffic
 \end{column}
 \begin{column}{0.38\textwidth}
 \begin{block}{Key Finding}
-Interleaving arcs are \textbf{not linearly separable} --- no hyperplane can separate them.
+Interleaving arcs are \textbf{not linearly separable} $\Rightarrow$ no hyperplane can separate them.
 \end{block}
 \begin{itemize}
     \item Softmax places a line through both classes $\Rightarrow$ fails
@@ -296,7 +291,7 @@ NN $h\!=\!32$ & \textbf{95.7\%} & \textbf{0.157} \\
 \begin{itemize}
     \item $\sim$2.5 ppt accuracy gain, 42\% lower CE
     \item CE reduction $>$ accuracy gain $\Rightarrow$ NN gives better-calibrated probabilities
-    \item Linear model is already strong (93\%) --- Digits is ``mostly linear''
+    \item Linear model is already strong (93\%)     Digits is ``mostly linear''
 \end{itemize}
 \end{column}
 \end{columns}
@@ -314,7 +309,7 @@ NN $h\!=\!32$ & \textbf{95.7\%} & \textbf{0.157} \\
 \end{column}
 \begin{column}{0.33\textwidth}
 \begin{itemize}
-    \item \textbf{$h\!=\!2$:} crude, nearly linear separation --- too few dimensions to represent the curve
+    \item \textbf{$h\!=\!2$:} crude, nearly linear separation - too few dimensions to represent the curve
     \item \textbf{$h\!=\!8$:} smooth nonlinear boundary captures the moon shape
     \item \textbf{$h\!=\!32$:} even tighter fit, but marginal gain over $h\!=\!8$
 \end{itemize}
@@ -419,7 +414,7 @@ NN & $\mathbf{95.7\% \pm 0.9\%}$ & $\mathbf{0.157 \pm 0.016}$ \\
 
 \vspace{0.2em}
 \centering
-{\small\textbf{Key insight:} The pixel space is effectively ${\sim}$20-dimensional --- most variation lives in a low-rank subspace.}
+{\small\textbf{Key insight:} The pixel space is effectively ${\sim}$20-dimensional - most variation lives in a low-rank subspace.}
 
 \end{frame}
 
@@ -447,7 +442,7 @@ NN & $\mathbf{95.7\% \pm 0.9\%}$ & $\mathbf{0.157 \pm 0.016}$ \\
 \vspace{0.5em}
 \begin{itemize}
     \item $m{=}20$: discard 69\% of dims, lose only 1.4 ppt
-    \item Digits is ``mostly linear'' --- linear methods already capture most discriminative structure
+    \item Digits is ``mostly linear'' - linear methods already capture most discriminative structure
     \item NN at full 64 dims (95.7\%) still beats Softmax at any PCA level $\Rightarrow$ \textbf{nonlinear features add value beyond what PCA captures}
 \end{itemize}
 \end{column}
@@ -479,7 +474,7 @@ NN $h\!=\!32$ & 95.7\% & 0.157 \\
 }
 
 \vspace{0.3em}
-{\small\textbf{Why it fails --- capacity, not optimisation:}}
+{\small\textbf{Why it fails: capacity, not optimisation:}}
 \begin{itemize}\itemsep0.1em
     \item {\small 2-D bottleneck \textbf{destroys} 64-D information}
     \item {\small Same optimizer \& epochs as $h{=}32$ $\Rightarrow$ not optimizer}
@@ -510,7 +505,7 @@ The linear model is \textit{insufficient} when boundaries must curve (Moons).
 \begin{block}{\textbf{Q2:} What representational change does the hidden layer provide?}
 $h = \tanh(W_1 x + b_1)$: a learned nonlinear coordinate change.\\
 \textbf{Moons:} ``untwists'' interleaving arcs so they become linearly separable in $\mathbb{R}^{32}$.\\
-\textbf{Digits:} extracts nonlinear feature combinations (stroke curvatures, junctions) that PCA cannot capture --- accounting for the $\sim$2.5-point gain.
+\textbf{Digits:} extracts nonlinear feature combinations (stroke curvatures, junctions) that PCA cannot capture - accounting for the $\sim$2.5-point gain.
 \end{block}
 
 \end{frame}
@@ -529,7 +524,7 @@ $h = \tanh(W_1 x + b_1)$: a learned nonlinear coordinate change.\\
 \vspace{0.8em}
 
 \begin{block}{\textbf{Q4:} What does the failure case teach about optimisation, capacity, or generalisation?}
-The $h{=}2$ bottleneck teaches that \textbf{representational capacity is a prerequisite optimisation cannot substitute}.  Same optimizer, same $\eta$, same epochs --- yet 59\% vs.\ 95.7\%.\\[3pt]
+The $h{=}2$ bottleneck teaches that \textbf{representational capacity is a prerequisite optimisation cannot substitute}.  Same optimizer, same $\eta$, same epochs - yet 59\% vs.\ 95.7\%.\\[3pt]
 Three distinct failure modes exist:
 \begin{itemize}
   \item \textit{Optimisation failure:} architecture can represent a good solution, but optimizer can't find it.
@@ -546,7 +541,7 @@ Three distinct failure modes exist:
 \begin{frame}{Answering the Core Questions (3/3)}
 
 \begin{block}{\textbf{Q5:} What do repeated-seed statistics add beyond a single run?}
-A single run depends on random init and mini-batch order --- it can be ``lucky'' or ``unlucky.''\\[3pt]
+A single run depends on random init and mini-batch order - it can be ``lucky'' or ``unlucky.''\\[3pt]
 Five seeds + 95\% CI show: the 2.5-point NN advantage is \textbf{robust across seeds}, not an artefact.  The NN has slightly higher variance ($\pm$0.9\% vs.\ $\pm$0.7\%), consistent with more parameters creating more initialisation sensitivity.\\[3pt]
 Without this, we cannot distinguish genuine model-class gains from random variation.
 \end{block}
@@ -583,7 +578,7 @@ Our findings reliably characterise \textit{this specific comparison} on \textit{
 \end{columns}
 
 \vspace{0.3em}
-\centering\small\textit{These boundaries are honest --- they define what our evidence supports and what it does not.}
+\centering\small\textit{These boundaries are honest: they define what our evidence supports and what it does not.}
 
 \end{frame}
 
@@ -597,10 +592,10 @@ Our findings reliably characterise \textit{this specific comparison} on \textit{
 \toprule
 \textbf{Task} & \textbf{Linear model} & \textbf{Hidden layer} \\
 \midrule
-Gaussian & \textcolor{accentgreen}{Sufficient} --- Bayes boundary is a hyperplane & No benefit; wasted parameters \\[4pt]
-Moons & \textcolor{accentred}{Fails} --- cannot separate curved arcs & \textcolor{accentgreen}{Essential} --- learns nonlinear coordinate change \\[4pt]
-Digits & \textcolor{accentgreen}{Strong} (93.3\%) --- mostly linear structure & \textcolor{accentgreen}{Modest gain} (95.7\%) --- captures residual nonlinear features \\[4pt]
-Digits $h{=}2$ & 93.3\% (better!) & \textcolor{accentred}{59.0\%} --- bottleneck destroys information \\
+Gaussian & \textcolor{accentgreen}{Sufficient}; Bayes boundary is a hyperplane & No benefit; wasted parameters \\[4pt]
+Moons & \textcolor{accentred}{Fails}; cannot separate curved arcs & \textcolor{accentgreen}{Essential}; learns nonlinear coordinate change \\[4pt]
+Digits & \textcolor{accentgreen}{Strong} (93.3\%); mostly linear structure & \textcolor{accentgreen}{Modest gain} (95.7\%); captures residual nonlinear features \\[4pt]
+Digits $h{=}2$ & \textcolor{accentgreen}{93.3\%};  better! & \textcolor{accentred}{59.0\%}; bottleneck destroys information \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -626,10 +621,6 @@ The hidden layer helps \textbf{when and only when} the task geometry requires no
 {\large Questions?}
 
 \vspace{2em}
-\small
-All code implemented from scratch in NumPy --- no autograd, no PyTorch, no scikit-learn.\\[0.5em]
-Repository: \texttt{github.com/Murad-Huseynli/math4ai\_capstone}
-
 \vfill
 
 \end{frame}
